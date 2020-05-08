@@ -1,6 +1,3 @@
-import sys
-sys.path.insert(0, '../')
-
 import torch
 import torch.nn as nn
 import matplotlib.pyplot as plt
@@ -60,7 +57,7 @@ def main():
                                mdn_nll,
                                mode='logsigp')
 
-    sig_alphas = np.array([1 - frame.sig_alpha for frame in alpha_frames])
+    sig_alphas = np.array([frame.sig_alpha for frame in alpha_frames])
 
     fig, ax = plt.subplots()
     ax.plot(sig_alphas, linewidth=2, color='k', label='N = {0}'.format(args.finetune_num_iters))

@@ -13,8 +13,8 @@ def logsumexp(a, b):
 
 
 def sample_from_normal(mean, std, nsamples):
-    return torch.normal(torch.ones(nsamples, 1).mul_(mean),
-                        torch.ones(nsamples, 1).mul_(std))
+    return torch.normal(torch.ones(nsamples, 1) * mean,
+                        torch.ones(nsamples, 1) * std)
 
 
 def train_nll(opt, model, scm, nll, polarity='X2Y', encoder=None, decoder=None):
@@ -57,7 +57,8 @@ def train_nll(opt, model, scm, nll, polarity='X2Y', encoder=None, decoder=None):
 
 
 def marginal_nll(opt, inputs, nll):
-    gmm = GaussianMixture(opt.gmm_num_components).cuda()
+    n_features = inputs.size(1)
+    gmm = GaussianMixture(opt.gmm_num_components, n_features).cuda()
     gmm.fit(inputs)
     with torch.no_grad():
         loss_marginal = nll(gmm(inputs), inputs)
@@ -94,10 +95,10 @@ def train_alpha(opt, model_x2y, model_y2x, scm, alpha, nll, mode='logmix'):
         # same mechanism
         with torch.no_grad():
             param = np.random.uniform(-4, 4)
-            y_gt = sample_from_normal(param, 2, opt.nsamples)
-            x_gt = scm(y_gt)
-            # x_gt = sample_from_normal(param, 2, opt.nsamples)
-            # y_gt = scm(x_gt)
+            # y_gt = sample_from_normal(param, 2, opt.nsamples)
+            # x_gt = scm(y_gt)
+            x_gt = sample_from_normal(param, 2, opt.nsamples)
+            y_gt = scm(x_gt)
 
         x_gt, y_gt = x_gt.cuda(), y_gt.cuda()
 

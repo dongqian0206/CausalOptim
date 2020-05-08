@@ -2,6 +2,7 @@ import torch
 import torch.nn as nn
 import matplotlib.pyplot as plt
 import numpy as np
+import scipy
 from scipy import interpolate
 
 
@@ -20,25 +21,25 @@ class RandomSplineSCM(nn.Module):
         self.input_noise = input_noise
         self.output_noise = output_noise
 
-    def forward(self, X, Z=None):
-        if Z is None:
-            Z = self.sample(X.size())
+    def forward(self, x, z=None):
+        if z is None:
+            z = self.sample(x.size())
         if self.input_noise:
-            X = X + Z
-        _X_np = X.detach().cpu().numpy().squeeze()
-        _Y_np = interpolate.splev(_X_np, self._spline_spec)
-        _Y = torch.from_numpy(_Y_np).view(-1, 1).float()
-        Y = _Y + Z if self.output_noise else _Y
-        return Y
+            x = x + z
+        _x_np = x.detach().cpu().numpy().squeeze()
+        _y_np = interpolate.splev(_x_np, self._spline_spec)
+        _y = torch.from_numpy(_y_np).view(-1, 1).float()
+        y = _y + z if self.output_noise else _y
+        return y
 
     @staticmethod
     def sample(input_size):
         return torch.normal(torch.zeros(*input_size), torch.ones(*input_size))
     
-    def plot(self, X, title='Samples from the SCM', label=None, show=True, **kwargs):
-        Y = self(X)
+    def plot(self, x, title='Samples from the SCM', label=None, show=True, **kwargs):
+        y = self(x)
         plt.figure()
-        plt.scatter(X.squeeze().numpy(), Y.squeeze().numpy(), marker='+', label=label, **kwargs)
+        plt.scatter(x.squeeze().numpy(), y.squeeze().numpy(), marker='+', label=label, **kwargs)
         if show:
             plt.title(title)
             plt.xlabel('X')
