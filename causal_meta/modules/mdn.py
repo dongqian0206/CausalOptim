@@ -5,11 +5,11 @@ from torch.distributions.normal import Normal
 
 
 class MDN(nn.Module):
-    def __init__(self, hidden_size, n_gaussians):
+    def __init__(self, input_size, hidden_size, n_gaussians):
         super(MDN, self).__init__()
 
         self.z_h = nn.Sequential(
-            nn.Linear(1, hidden_size),
+            nn.Linear(input_size, hidden_size),
             nn.Tanh()
         )
         self.pi = nn.Linear(hidden_size, n_gaussians)

@@ -2,7 +2,6 @@ import torch
 import torch.nn as nn
 import matplotlib.pyplot as plt
 import numpy as np
-import scipy
 from scipy import interpolate
 
 
@@ -36,12 +35,11 @@ class RandomSplineSCM(nn.Module):
     def sample(input_size):
         return torch.normal(torch.zeros(*input_size), torch.ones(*input_size))
     
-    def plot(self, x, title='Samples from the SCM', label=None, show=True, **kwargs):
-        y = self(x)
+    def plot(self, x, title='Samples from the SCM', label=None, **kwargs):
+        y = self.forward(x)
         plt.figure()
         plt.scatter(x.squeeze().numpy(), y.squeeze().numpy(), marker='+', label=label, **kwargs)
-        if show:
-            plt.title(title)
-            plt.xlabel('X')
-            plt.ylabel('Y')
-            plt.show()
+        plt.title(title)
+        plt.xlabel('X')
+        plt.ylabel('Y')
+        plt.show()
