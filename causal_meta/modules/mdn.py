@@ -27,6 +27,6 @@ class MDN(nn.Module):
 def mdn_nll(params, x, mean=True):
     pi, mu, sigma = params
     dist = Normal(loc=mu, scale=sigma)
-    log_prob_pi_x = torch.log(pi) + dist.log_prob(x)
+    log_prob_pi_x = dist.log_prob(x) + torch.log(pi)
     loss = -torch.logsumexp(log_prob_pi_x, dim=1)
     return torch.mean(loss) if mean else loss

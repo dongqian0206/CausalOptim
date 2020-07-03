@@ -27,26 +27,39 @@ def gradnan_filter(model):
     return nan_found
 
 
-def train_mle_nll(args, model, scm, polarity='X2Y'):
+def train_mle_nll(args, model, scm, encoder=None, decoder=None, polarity='X2Y'):
 
+    model = model.cuda()
+    if encoder is not None: 
+        encoder = encoder.cuda()
+    if decoder is not None: 
+        decoder = decoder.cuda()
+    
     optimizer_mle = optim.Adam(model.parameters(), lr=args.mle_lr)
 
     losses = []
 
     for iter_num in range(1, args.mle_n_iters + 1):
 
+        x = sample_from_normal(0, 2, args.mle_nsamples, args.n_features)
+        
         with torch.no_grad():
-            x = sample_from_normal(0, 2, args.mle_nsamples, args.n_features)
             y = scm(x)
+            x, y = x.cuda(), y.cuda()
 
-            if polarity == 'X2Y':
-                inputs, targets = x, y
-            elif polarity == 'Y2X':
-                inputs, targets = y, x
-            else:
-                raise ValueError('%s does not match any known polarity.' % polarity)
+            if decoder is not None:
+                x, y = decoder(x, y)
+            if encoder is not None:
+                x, y = encoder(x, y)
 
-            inputs, targets = inputs.cuda(), targets.cuda()
+        if polarity == 'X2Y':
+            inputs, targets = x, y
+        elif polarity == 'Y2X':
+            inputs, targets = y, x
+        else:
+            raise ValueError('%s does not match any known polarity.' % polarity)
+
+        inputs, targets = inputs.cuda(), targets.cuda()
 
         loss_conditional = mdn_nll(model(inputs), targets)
 
@@ -61,7 +74,7 @@ def train_mle_nll(args, model, scm, polarity='X2Y'):
 
 def marginal_nll(args, inputs):
     gmm = GaussianMixture(args.gmm_n_gaussians, args.n_features).cuda()
-    gmm.fit(inputs)
+    gmm.fit(inputs, n_iters=args.em_n_iters)
     with torch.no_grad():
         loss_marginal = mdn_nll(gmm(inputs), inputs)
     return loss_marginal
@@ -72,11 +85,11 @@ def transfer_finetune(args, model_x2y, model_y2x, inputs, targets):
     optim_x2y = optim.Adam(model_x2y.parameters(), lr=args.finetune_lr)
     optim_y2x = optim.Adam(model_y2x.parameters(), lr=args.finetune_lr)
 
-    loss_marg_x2y = marginal_nll(args, inputs).item() if args.train_gmm else 0.
-    loss_marg_y2x = marginal_nll(args, targets).item() if args.train_gmm else 0.
+    loss_marg_x2y = marginal_nll(args, inputs) if args.train_gmm else 0.
+    loss_marg_y2x = marginal_nll(args, targets) if args.train_gmm else 0.
 
-    is_nan = False
     loss_x2y, loss_y2x = [], []
+    is_nan = False
 
     for _ in range(args.finetune_n_iters):
         
@@ -90,8 +103,8 @@ def transfer_finetune(args, model_x2y, model_y2x, inputs, targets):
         optim_x2y.zero_grad()
         optim_y2x.zero_grad()
         
-        loss_cond_x2y.backward() 
-        loss_cond_y2x.backward()
+        loss_cond_x2y.backward(retain_graph=True)
+        loss_cond_y2x.backward(retain_graph=True)
 
         nan_in_x2y = gradnan_filter(model_x2y)
         nan_in_y2x = gradnan_filter(model_y2x)
@@ -103,8 +116,8 @@ def transfer_finetune(args, model_x2y, model_y2x, inputs, targets):
         optim_x2y.step()
         optim_y2x.step()
 
-        loss_x2y.append(loss_cond_x2y.item() + loss_marg_x2y)
-        loss_y2x.append(loss_cond_y2x.item() + loss_marg_y2x)
+        loss_x2y.append(loss_cond_x2y + loss_marg_x2y)
+        loss_y2x.append(loss_cond_y2x + loss_marg_y2x)
 
     return loss_x2y, loss_y2x, is_nan
 
@@ -117,8 +130,8 @@ def train_alpha(args, model_x2y, model_y2x, scm, alpha, mode='logmix'):
 
     for meta_iter_num in range(1, args.meta_n_iters + 1):
 
+        # same mechanism (conditional distribution)
         with torch.no_grad():
-            # same mechanism (conditional distribution)
             param = np.random.uniform(-4, 4)
             x_ts = sample_from_normal(param, 2, args.meta_nsamples, args.n_features)
             y_ts = scm(x_ts)
@@ -131,8 +144,8 @@ def train_alpha(args, model_x2y, model_y2x, scm, alpha, mode='logmix'):
         loss_x2y, loss_y2x, return_is_nan = transfer_finetune(args, model_x2y, model_y2x, x_ts, y_ts)
 
         if not return_is_nan:
-            loss_x2y = sum(loss_x2y) / len(loss_x2y)
-            loss_y2x = sum(loss_y2x) / len(loss_y2x)
+            loss_x2y = torch.stack(loss_x2y).mean()
+            loss_y2x = torch.stack(loss_y2x).mean()
 
             # Estimate gradient
             if mode == 'mix':
@@ -163,7 +176,7 @@ def train_alpha(args, model_x2y, model_y2x, scm, alpha, mode='logmix'):
             model_y2x.load_state_dict(state_y2x)
 
             print('| Iteration: %d | Prob: %.3f | X2Y_Loss: %.3f | Y2X_Loss: %.3f'
-                  % (meta_iter_num, torch.sigmoid(alpha).item(), loss_x2y, loss_y2x))
+                  % (meta_iter_num, torch.sigmoid(alpha).item(), loss_x2y.item(), loss_y2x.item()))
 
             with torch.no_grad():
                 results.append(Namespace(iter_num=meta_iter_num,
